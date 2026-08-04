@@ -72,6 +72,23 @@ const publications = [
                 journalName: "COMPAG"
                 
             },
+    {
+                author1:"Krishna, G.V.",
+                author2:"Jothiprakash, V.",
+                author3:"Sivakumar, B.",
+                title: "Analysis of Evapotranspiration Trends in India",
+                date: "June 2025",
+                confname:"EWRA",
+                type: "conference",
+            },
+    {
+                author1:"Krishna, G.V.",
+                author3:"Sivakumar, B.",
+                title: "Spatio-Temporal Modelling for Streamflow Prediction using Graph-based Machine Learning Framework",
+                date: "August 2026",
+                confname:"AOGS",
+                type: "conference",
+            },
     // More publication data entries...
 ];
 

@@ -39,30 +39,5 @@
         
 
 
-        document.addEventListener('DOMContentLoaded', (event) => { /* Listens for when the DOM content is fully loaded */
-            const texts = ["my", "Gunturu Vamsi Krishna's"]; /* Array of texts for typing effect */
-            const typingElement = document.getElementById('typing'); /* Gets the element for dynamic typing */
-            const typingSpeed = 100; // typing speed in milliseconds
-            const eraseSpeed = 50; // erasing speed in milliseconds
-            const delayBetweenIterations = 2000; // delay before starting to erase
-            const delayAfterErase = 1000; // delay before starting to type again
-            let textIndex = 0; /* Index of current text in texts array */
-            let charIndex = 0; /* Index of current character in current text */
-            let isErasing = false; /* Flag to indicate whether erasing is in progress */
-
-            function type() {
-                const currentText = texts[textIndex]; /* Gets the current text */
-                if (charIndex < currentText.length && !isErasing) { /* Checks if typing is not complete and not erasing */
-                    typingElement.textContent += currentText.charAt(charIndex); /* Types the next character */
-                    charIndex++; /* Moves to the next character */
-                    setTimeout(type, typingSpeed); /* Calls type function recursively with a delay */
-                } else if (charIndex === currentText.length) { /* Checks if typing is complete */
-                    setTimeout(() => {
-                        isErasing = true; /* Sets the flag to indicate erasing */
-                        erase(); /* Calls erase function */
-                    }, delayBetweenIterations); /* Waits for a delay before starting to erase */
-                }
-            }
-
         });
 

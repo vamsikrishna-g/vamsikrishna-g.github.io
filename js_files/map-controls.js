@@ -1,4 +1,4 @@
-const baseMaps = {
-    "Satellite": satellite,
-    "OpenStreetMap": openStreetMap
-};
+document.addEventListener("DOMContentLoaded", () => {
+    if (window.gvkMap && window.gvkBaseLayers)
+        L.control.layers(window.gvkBaseLayers).addTo(window.gvkMap);
+});

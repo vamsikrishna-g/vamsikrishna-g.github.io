@@ -64,19 +64,5 @@
                 }
             }
 
-            function erase() {
-                const currentText = texts[textIndex]; /* Gets the current text */
-                if (charIndex > 0 && isErasing) { /* Checks if erasing is in progress */
-                    typingElement.textContent = currentText.substring(0, charIndex - 1); /* Erases the last character */
-                    charIndex--; /* Moves to the previous character */
-                    setTimeout(erase, eraseSpeed); /* Calls erase function recursively with a delay */
-                } else if (charIndex === 0) { /* Checks if erasing is complete */
-                    isErasing = false; /* Resets the flag for erasing */
-                    textIndex = (textIndex + 1) % texts.length; // Move to the next text /* Moves to the next text in texts array */
-                    setTimeout(type, delayAfterErase); /* Waits for a delay before starting to type again */
-                }
-            }
-
-            type(); // Start the typing effect /* Calls the type function to start the typing effect */
         });
 

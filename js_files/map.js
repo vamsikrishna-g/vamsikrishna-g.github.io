@@ -7,7 +7,7 @@ document.addEventListener("DOMContentLoaded", () => {
         maxZoom: 19,
         zoomControl: true,
         worldCopyJump: false
-    }).setView([20.5, 78], 5);
+    }).setView([20.5, 73], 5);
 
     const esri = window.GVK_BASEMAPS.EsriWorldImagery().addTo(map);
 

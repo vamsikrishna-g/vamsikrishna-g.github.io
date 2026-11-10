@@ -1,43 +1,57 @@
 
+// ==========================================
+// 1. MOVE CONTAINER TO TOP AND REDIRECT
+// ==========================================
 
-        // JavaScript to move the container to the top of the page
-        function moveToTop(event, id) { // Function to move the container to the top of the page
-            event.preventDefault(); // Prevents the default behavior of the link
-            document.getElementById('container').classList.add('moved'); // Adds the 'moved' class to the container
-            setTimeout(function() { // Sets a timeout to wait for the transition to complete
-                window.location.href = url; // Redirects to the specified URL
-            }, 2000); // Match the transition duration
-        }
-        
-        // JavaScript to show content on click
-        document.addEventListener("DOMContentLoaded", function() { // Listens for when the DOM content is fully loaded
-            // Hide all sections initially
-            var sections = document.querySelectorAll("main section"); // Selects all sections in the main element
-            sections.forEach(function(section) { // Iterates over each section
-                section.style.display = "none";// Hides the section
-            });
+function moveToTop(event, url) {
 
-            // Add click event listeners to navigation links
-            var navLinks = document.querySelectorAll("nav a"); // Selects all navigation links
-            navLinks.forEach(function(link) {// Iterates over each navigation link
-                link.addEventListener("click", function(event) {// Adds a click event listener
-                    event.preventDefault();// Prevents the default behavior of the link
-                    var targetId = link.getAttribute("href").substring(1); // Gets the target section ID
-                    var targetSection = document.getElementById(targetId);// Gets the target section
-                    if (targetSection) {// Checks if the target section exists
-                        // Hide all sections
-                        sections.forEach(function(section) {// Iterates over each section
-                            section.style.display = "none";// Hides the section
-                        });
-                        // Show the clicked section
-                        targetSection.style.display = "block";// Displays the target section
-                    }
+    event.preventDefault();
+
+    document.getElementById('container').classList.add('moved');
+
+    setTimeout(function() {
+        window.location.href = url;
+    }, 2000);
+}
+
+
+// ==========================================
+// 2. NAVIGATION: SHOW CONTENT ON CLICK
+// ==========================================
+
+document.addEventListener("DOMContentLoaded", function() {
+
+    // Hide all sections initially
+    var sections = document.querySelectorAll("main section");
+
+    sections.forEach(function(section) {
+        section.style.display = "none";
+    });
+
+    // Add click event listeners to navigation links
+    var navLinks = document.querySelectorAll("nav a");
+
+    navLinks.forEach(function(link) {
+
+        link.addEventListener("click", function(event) {
+
+            event.preventDefault();
+
+            var targetId = link.getAttribute("href").substring(1);
+
+            var targetSection = document.getElementById(targetId);
+
+            if (targetSection) {
+
+                // Hide all sections
+                sections.forEach(function(section) {
+                    section.style.display = "none";
                 });
-            });
+
+                // Show selected section
+                targetSection.style.display = "block";
+            }
         });
+    });
 
-        
-
-
-        });
-
+});

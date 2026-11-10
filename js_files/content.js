@@ -2,7 +2,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const target = document.getElementById("typing");
     if (!target) return;
 
-    const words = ["Vamsi’s", "GVK"];
+    const words = ["GVK", "Vamsi’s"];
     let word = 0, char = 0, erase = false;
 
     function type() {

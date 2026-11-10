@@ -1,152 +1,81 @@
 <!DOCTYPE html>
 <html lang="en">
-
-
 <head>
-
-
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>GVK</title>
-    <link rel="stylesheet" type="text/css" href="css/style.css" />
-    <link rel="stylesheet" type="text/css" href="css/stars.css" />
-    <link rel="stylesheet" type="text/css" href="css/education.css" />
-    <link rel="stylesheet" type="text/css" href="css/style.css">
-
-
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/stars.css">
+    <link rel="stylesheet" href="css/education.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 </head>
-
-
-
 <body>
+    <div class="stars" aria-hidden="true"></div>
+    <div class="twinkling" aria-hidden="true"></div>
 
-    <!-- Stars background element -->
-    <div class="stars"></div>
-    <!-- Twinkling background element -->
-    <div class="twinkling"></div>
+    <div class="container">
+        <header>
+            <h1>Welcome to <span id="typing"></span><span> Website!</span></h1>
+            <nav aria-label="Main navigation">
+                <a href="#" class="nav-link active" data-page="home">Home</a>
+                <a href="#" class="nav-link" data-page="about">About me</a>
+                <a href="#" class="nav-link" data-page="pubs">Publications</a>
+                <a href="#" class="nav-link" data-page="hyd">Hydrology</a>
+                <a href="#" class="nav-link" data-page="contact">Contact me</a>
+            </nav>
+            <div id="home-view">Welcome. Choose a page from the navigation above.</div>
+        </header>
 
-
-
-    
-    <div class="container" id="container">
-    <header>
-        <h1>Welcome to </span><span id="typing"></span><span> Website!</span></h1>
-        <nav>
-                <a href="#home" onclick="moveToTop(event, 'home')">Home</a>
-                <a href="#about" onclick="moveToTop(event, 'about')">About me</a>
-                <a href="#pubs" onclick="moveToTop(event, 'pubs')">Publications</a>
-                <a href="#hyd" onclick="moveToTop(event, 'hyd')">Hydrology</a>
-        </nav>
-    </header>
-
-
-
-
-
-
-    <main>
-        
-
-        
-        <section id="about">
-            <h2 style="text-align: left;">About me</h2>
-            <!-- Content for the about section -->
-            <p style="text-align: left;">My educational background</p>
-
-            <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.8.1/css/all.min.css" rel="stylesheet" />
-                <div class="timeline" style="--items: 5;">
-                <h1>Education</h1>
-                <ul>
-                    <li style="--index: 1">
-                    <h3>2009</h3>
-                    <p>Schooling</p>
-                    </li>
-                    <li style="--index: 2">
-                    <h3>2011 July</h3>
-                    <p>Intermediate education, Narayana College</p>
-                    </li>
-                    <li style="--index: 3">
-                    <h3>2015 August</h3>
-                    <p>
-                        Bachelor's in Civil Engineering, Vikrama Simhapuri University
-                    </p>
-                    </li>
-                    <li style="--index: 4">
-                    <h3>2018 July</h3>
-                    <p>
-                        Master's in Remote Sensing and Geographic Information Systems, National Institute of Technology, Karnataka
-                    </p>
-                    </li>
-                    <li style="--index: 5">
-                    <h3>2025 January</h3>
-                    <p>
-                        PhD in Civil Engineering, Indian Institute of Technology, Bombay
-                    </p>
-                    </li>
-                </ul>
+        <main>
+            <section id="about" class="page-section">
+                <h2>About me</h2>
+                <p>My educational background</p>
+                <div class="timeline" style="--items: 7">
+                    <h2>Education</h2>
+                    <ul>
+                        <li style="--index: 1"><h3>2009</h3><p>Schooling</p></li>
+                        <li style="--index: 2"><h3>July 2011</h3><p>Intermediate education, Narayana College</p></li>
+                        <li style="--index: 3"><h3>August 2015</h3><p>Bachelor's in Civil Engineering, Vikrama Simhapuri University</p></li>
+                        <li style="--index: 4"><h3>July 2018</h3><p>Master's in Remote Sensing and Geographic Information Systems, National Institute of Technology, Karnataka</p></li>
+                        <li style="--index: 5"><h3>January 2025</h3><p>PhD in Civil Engineering, Indian Institute of Technology, Bombay</p></li>
+                        <li style="--index: 6"><h3>Researcher</h3></li>
+                        <li style="--index: 7"><h3>Job</h3></li>
+                    </ul>
                 </div>
-        </section>
-        
+            </section>
 
+            <section id="pubs" class="page-section">
+                <h2>List of Publications</h2>
+                <div class="filter-buttons">
+                    <button class="filter-button active" data-filter="all">All</button>
+                    <button class="filter-button" data-filter="journal">Journals</button>
+                    <button class="filter-button" data-filter="conference">Conferences</button>
+                </div>
+                <ul id="publication-list"></ul>
+            </section>
 
-        
-        <section id="pubs">
-            <h2 style="text-align: left;">List of Publications</h2>
-            <!-- Content for the services section -->
-            <!--p>Some of my recent publications:</p-->
-            <div class="filter-buttons">
-                <span class="filter-button" onclick="filterByType('all')">All</span>
-                <span class="filter-button" onclick="filterByType('journal')">Journals</span>
-                <span class="filter-button" onclick="filterByType('conference')">Conferences</span>
-            </div>
-            <ul id="publication-list">
-                <!-- Your publication list goes here -->
-            </ul>
-        
-        </section>
+            <section id="hyd" class="page-section">
+                <h2>Hydrology</h2>
+                <div id="map" role="region" aria-label="Interactive hydrology map"></div>
+                <p class="map-note">Map layers can be switched on and off using the layer control.</p>
+            </section>
 
-
-
-        <section id="hyd">
-
-            <h2>Map</h2>
-
-            <div id="map"></div>
-            
-            <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-            
-            <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-            <script src="js_files/map.js"></script>
-            
-            <script src="js_files/base-map.js"></script>
-    
-            <script src="js_files/map-controls.js"></script>
-            
-            <script src="data/DAM-data.js"></script>
-    
-            <script src="js_files/dams.js"></script>
-        
-        </section>
-    </main>
-
-
-
-
-
-
-
-
-
+            <section id="contact" class="page-section">
+                <h2>Contact me</h2>
+                <p>For academic, research, and professional enquiries, please get in touch.</p>
+                <p>Contact details will be added here.</p>
+            </section>
+        </main>
     </div>
 
-    <script src="js_files/content.js"></script> <!-- Link to the JavaScript file -->
-
-    <script src="js_files/publication.js"></script> <!-- Link to the JavaScript file -->
-
-    
-
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="data/DAM-data.js"></script>
+    <script src="js_files/content.js"></script>
+    <script src="js_files/publication.js"></script>
+    <script src="js_files/base-map.js"></script>
+    <script src="js_files/map.js"></script>
+    <script src="js_files/map-controls.js"></script>
+    <script src="js_files/dams.js"></script>
+    <script src="js_files/page-navigation.js"></script>
 </body>
-
-
 </html>

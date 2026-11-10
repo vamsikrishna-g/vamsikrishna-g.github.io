@@ -89,3 +89,24 @@ footer { padding: 20px 0; color: #aaa; }
     header h1 { font-size: 1.55rem; }
     #map { height: 380px; }
 }
+
+
+/* Keep Leaflet basemap and overlay labels left-aligned. */
+.leaflet-control-layers,
+.leaflet-control-layers-list,
+.leaflet-control-layers-base,
+.leaflet-control-layers-overlays {
+    text-align: left !important;
+}
+
+.leaflet-control-layers label {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    text-align: left !important;
+    gap: 6px;
+}
+
+.leaflet-control-layers label span {
+    text-align: left !important;
+}

@@ -1,10 +1,18 @@
-const map = L.map("map");
+document.addEventListener("DOMContentLoaded", () => {
+    const element = document.getElementById("map");
+    if (!element || typeof L === "undefined") return;
 
-map.setView([22.5, 78.9], 5);
+    const map = L.map(element).setView([22.5, 78.9], 5);
+    const layers = window.GVK_BASEMAPS;
 
-L.tileLayer(
-    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    {
-        attribution: "&copy; OpenStreetMap contributors"
-    }
-).addTo(map);
+    // Esri World Imagery is the default basemap
+    const esri = layers.EsriWorldImagery().addTo(map);
+
+    window.gvkMap = map;
+
+    // Keep both basemaps available in the layer switcher
+    window.gvkBaseLayers = {
+        "Esri World Imagery": esri,
+        "OpenStreetMap": layers.OpenStreetMap()
+    };
+});

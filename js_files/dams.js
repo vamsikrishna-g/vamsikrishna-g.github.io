@@ -1,16 +1,28 @@
-// Defined immediately so map.js can call it after creating the Leaflet map.
+
+// GVK — Dams overlay
 window.addGVKDams = function () {
+
     const damData = window.DAM_DATA;
     const map = window.gvkMap;
 
-    if (!map || !damData || !Array.isArray(damData.features) ||
-        damData.features.length === 0 || window.gvkDamLayer) return;
+    if (!map || !damData ||
+        !Array.isArray(damData.features) ||
+        damData.features.length === 0 ||
+        window.gvkDamLayer) {
+        return;
+    }
 
     const safe = value => String(value ?? "-").replace(/[&<>"']/g, char => ({
-        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
     }[char]));
 
+    // Create dam GeoJSON layer
     window.gvkDamLayer = L.geoJSON(damData, {
+
         pointToLayer: (feature, latlng) => L.circleMarker(latlng, {
             radius: 8,
             color: "red",
@@ -18,8 +30,11 @@ window.addGVKDams = function () {
             fillOpacity: 1,
             weight: 1.5
         }),
+
         onEachFeature: (feature, layer) => {
+
             const p = feature.properties || {};
+
             layer.bindTooltip(`
                 <b>${safe(p.Name_of_Da)}</b><br>
                 <b>NRLD No:</b> ${safe(p.NRLD_NO)}<br>
@@ -38,12 +53,30 @@ window.addGVKDams = function () {
                 <b>Dam Length:</b> ${safe(p.Length_of_)} m<br>
                 <b>Type:</b> ${safe(p.Type_of_Da)}<br>
                 <b>Purpose:</b> ${safe(p.Purpose)}<br>
-                <b>Latitude:</b> ${safe(p.Latitude_) }<br>
+                <b>Latitude:</b> ${safe(p.Latitude_)}<br>
                 <b>Longitude:</b> ${safe(p.Longitude_)}
-            `, { direction: "top", sticky: true });
+            `, {
+                direction: "top",
+                sticky: true
+            });
         }
     });
 
-    // Keep dams OFF initially. The user controls visibility from the layer menu.
-    window.gvkOverlayLayers = { "Dams": window.gvkDamLayer };
+    // Preserve existing overlays, including BWA
+    window.gvkOverlayLayers = window.gvkOverlayLayers || {};
+    window.gvkOverlayLayers["Dams"] = window.gvkDamLayer;
+
+    // Register with the existing Leaflet layer control
+    if (window.gvkLayerControl) {
+        window.gvkLayerControl.addOverlay(
+            window.gvkDamLayer,
+            "Dams"
+        );
+    }
+
+    console.log(
+        "GVK Dams loaded:",
+        damData.features.length,
+        "features"
+    );
 };

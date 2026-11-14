@@ -1,7 +1,7 @@
 
 /* =========================================
    GVK SURGE LAYER
-   GDAL3.js + Original FlatGeobuf
+   GDAL3.js + FlatGeobuf
 ========================================= */
 
 window.gvkSurgeLayer = null;
@@ -49,7 +49,6 @@ function parseSurgeCSV(text) {
 
             row = [];
             value = "";
-
         }
         else {
             value += char;
@@ -74,7 +73,6 @@ function parseSurgeCSV(text) {
         });
 
         return properties;
-
     });
 }
 
@@ -89,11 +87,8 @@ async function initialiseSurge() {
 
         // 1. Initialise GDAL
         const gdal = await initGdalJs({
-
             path: "https://cdn.jsdelivr.net/npm/gdal3.js@2.8.1/dist/package",
-
             useWorker: false
-
         });
 
         window.gvkGDAL = gdal;
@@ -112,10 +107,7 @@ async function initialiseSurge() {
 
         const blob = await response.blob();
 
-        const file = new File(
-            [blob],
-            "Surge.fgb"
-        );
+        const file = new File([blob], "Surge.fgb");
 
 
         // 3. Open original FGB
@@ -129,15 +121,14 @@ async function initialiseSurge() {
 
         window.gvkSurgeDataset = dataset;
 
+
         // 4. Read dataset information
         const info = await gdal.getInfo(dataset);
 
         console.log("Surge dataset information:", info);
 
 
-        // 5. Extract features using GDAL
-        // CSV exists only in memory; no GeoJSON is generated.
-
+        // 5. Export temporary CSV in memory
         const output = await gdal.ogr2ogr(
             dataset,
             [
@@ -148,20 +139,17 @@ async function initialiseSurge() {
         );
 
         const bytes = await gdal.getFileBytes(output);
-
         const csvText = new TextDecoder().decode(bytes);
 
         const records = parseSurgeCSV(csvText);
 
-
-        // 6. Find WKT geometry column
-        const firstRecord = records[0];
-
-        if (!firstRecord) {
+        if (!records.length) {
             throw new Error("No Surge records found.");
         }
 
-        const geometryField = Object.keys(firstRecord).find(
+
+        // 6. Find WKT geometry column
+        const geometryField = Object.keys(records[0]).find(
             key => key.toUpperCase() === "WKT"
         );
 
@@ -204,7 +192,7 @@ async function initialiseSurge() {
                 }
             );
 
-            // Attribute popup
+            // Create attribute popup
             const popup = document.createElement("div");
 
             Object.entries(record).forEach(([key, value]) => {
@@ -212,7 +200,6 @@ async function initialiseSurge() {
                 if (key === geometryField) return;
 
                 const line = document.createElement("div");
-
                 const label = document.createElement("strong");
 
                 label.textContent = key + ": ";
@@ -223,16 +210,18 @@ async function initialiseSurge() {
                 );
 
                 popup.appendChild(line);
-
             });
 
             marker.bindPopup(popup);
-
             marker.addTo(surgeLayer);
 
             featureCount++;
-
         });
+
+
+        if (featureCount === 0) {
+            throw new Error("No valid Surge point geometries found.");
+        }
 
 
         // 8. Register Surge overlay
@@ -248,12 +237,19 @@ async function initialiseSurge() {
         window.gvkSurgeLayer = surgeLayer;
 
 
-        // 9. Add to existing map
+        // 9. Add Surge to map
         surgeLayer.addTo(window.gvkMap);
 
 
-        // 10. Refresh layer control
-        if (typeof window.addGVKMapControls === "function") {
+        // 10. Update existing layer control
+        if (window.gvkLayerControl) {
+
+            window.gvkLayerControl.addOverlay(
+                surgeLayer,
+                "Surge"
+            );
+
+        } else if (typeof window.addGVKMapControls === "function") {
 
             window.addGVKMapControls();
 
@@ -261,7 +257,6 @@ async function initialiseSurge() {
 
 
         console.log("Surge features displayed:", featureCount);
-
         console.log("GVK Surge layer successfully added!");
 
     }
@@ -270,11 +265,13 @@ async function initialiseSurge() {
         console.error("Surge loading failed:", error);
 
     }
-
 }
 
 
-// Start after the existing map initialisation
+/* =========================================
+   START AFTER MAP INITIALISATION
+========================================= */
+
 document.addEventListener(
     "DOMContentLoaded",
     initialiseSurge

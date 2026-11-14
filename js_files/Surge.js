@@ -1,21 +1,25 @@
+
 let gdal;
 
-// FGB file location
 const filePath = "data/Surge/Surge.fgb";
 
-// Initialise GDAL
 async function initialiseGDAL() {
     try {
+        // Initialise GDAL
         gdal = await initGdalJs({
             path: "https://cdn.jsdelivr.net/npm/gdal3.js@2.8.1/dist/package",
             useWorker: false
         });
 
         console.log("GDAL initialised successfully!");
-        console.log("FGB file location:", filePath);
+
+        // Open the FlatGeobuf file
+        const result = await gdal.open([filePath]);
+
+        console.log("FGB file opened:", result);
 
     } catch (error) {
-        console.error("GDAL initialisation failed:", error);
+        console.error("GDAL operation failed:", error);
     }
 }
 

@@ -1,20 +1,34 @@
-// Defined immediately so map.js can call it from its DOMContentLoaded handler.
+// Layer control for GVK map
+// Called from map.js after map initialisation.
+
 window.addGVKMapControls = function () {
 
-    if (!window.gvkMap || !window.gvkBaseLayers) return;
+    // Check whether map and base layers are available
+    if (!window.gvkMap || !window.gvkBaseLayers) {
+        console.warn("Map or base layers are not initialised.");
+        return;
+    }
 
     // Remove existing layer control before recreating it
     if (window.gvkLayerControl) {
         window.gvkMap.removeControl(window.gvkLayerControl);
     }
 
-    // Create the layer control
+    // Initialise overlay collection if not already available
+    window.gvkOverlayLayers = window.gvkOverlayLayers || {};
+
+    // Create Leaflet layer control
     window.gvkLayerControl = L.control.layers(
         window.gvkBaseLayers,
-        window.gvkOverlayLayers || {},
-        { collapsed: true }
+        window.gvkOverlayLayers,
+        {
+            collapsed: true
+        }
     ).addTo(window.gvkMap);
 
-    // Make the control accessible to other JavaScript files
+    // Make layer control globally accessible
     window.GVK_LAYER_CONTROL = window.gvkLayerControl;
+
+    console.log("GVK layer control initialised.");
+
 };

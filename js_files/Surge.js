@@ -1,150 +1,66 @@
 
-/* =========================================
-   GVK SURGE LAYER
-   Direct FlatGeobuf reading
-========================================= */
+let gdal;
 
-window.gvkSurgeLayer = null;
+const filePath = "./data/Surge/Surge.fgb";
 
-document.addEventListener("DOMContentLoaded", async () => {
+async function initialiseSurge() {
 
     try {
 
-        // 1. Check existing Leaflet map
-        const map = window.gvkMap;
+        // 1. Initialise GDAL
+        gdal = await initGdalJs({
+            path: "https://cdn.jsdelivr.net/npm/gdal3.js@2.8.1/dist/package",
+            useWorker: false
+        });
 
-        if (!map) {
-            throw new Error("GVK map is not initialised.");
-        }
+        window.gvkGDAL = gdal;
 
-        // 2. Check FlatGeobuf library
-        if (
-            typeof flatgeobuf === "undefined" ||
-            typeof flatgeobuf.deserialize !== "function"
-        ) {
-            throw new Error("FlatGeobuf library is unavailable.");
-        }
+        console.log("GDAL initialised successfully!");
 
-        // 3. FGB file location
-        const filePath = "./data/Surge/Surge.fgb";
-
-        console.log("Loading Surge FlatGeobuf:", filePath);
-
-        // 4. Fetch the original FGB file
+        // 2. Fetch the original FlatGeobuf file
         const response = await fetch(filePath);
 
         if (!response.ok) {
+            throw new Error(`FGB loading failed: ${response.status}`);
+        }
+
+        const blob = await response.blob();
+
+        const file = new File(
+            [blob],
+            "Surge.fgb",
+            { type: "application/octet-stream" }
+        );
+
+        // 3. Open original FGB directly with GDAL
+        const result = await gdal.open(file);
+
+        if (!result.datasets || result.datasets.length === 0) {
             throw new Error(
-                `Unable to load Surge.fgb: HTTP ${response.status}`
+                "GDAL could not open Surge.fgb: " +
+                JSON.stringify(result.errors)
             );
         }
 
-        const buffer = await response.arrayBuffer();
+        const dataset = result.datasets[0];
 
-        const fgbData = new Uint8Array(buffer);
+        window.gvkSurgeDataset = dataset;
 
-        console.log("Surge FGB loaded:", buffer.byteLength, "bytes");
+        // 4. Retrieve dataset information
+        const info = await gdal.getInfo(dataset);
 
-        // 5. Create an empty Leaflet layer
-        const surgeLayer = L.geoJSON([], {
+        window.gvkSurgeInfo = info;
 
-            // Point styling
-            pointToLayer: function (feature, latlng) {
-
-                return L.circleMarker(latlng, {
-                    radius: 5,
-                    color: "#ff4500",
-                    weight: 1,
-                    fillColor: "#ff6347",
-                    fillOpacity: 0.8
-                });
-
-            },
-
-            // Attribute popup
-            onEachFeature: function (feature, layer) {
-
-                const popup = document.createElement("div");
-
-                Object.entries(feature.properties || {}).forEach(
-                    ([key, value]) => {
-
-                        const row = document.createElement("div");
-
-                        const label = document.createElement("strong");
-
-                        label.textContent = key + ": ";
-
-                        row.append(
-                            label,
-                            document.createTextNode(String(value ?? ""))
-                        );
-
-                        popup.appendChild(row);
-
-                    }
-                );
-
-                layer.bindPopup(popup);
-
-            }
-
-        });
-
-        // 6. Read FGB features directly
-        const iterator = flatgeobuf.deserialize(fgbData);
-
-        let featureCount = 0;
-
-        for await (const feature of iterator) {
-
-            surgeLayer.addData(feature);
-
-            featureCount++;
-
-        }
-
-        console.log("Surge features loaded:", featureCount);
-
-        if (featureCount === 0) {
-            throw new Error("No Surge features were found.");
-        }
-
-        // 7. Register Surge in existing overlay collection
-        window.gvkOverlayLayers =
-            window.gvkOverlayLayers || {};
-
-        window.gvkOverlayLayers["Surge"] = surgeLayer;
-
-        window.gvkSurgeLayer = surgeLayer;
-
-        // 8. Add Surge to existing map
-        surgeLayer.addTo(map);
-
-        // 9. Refresh existing layer control
-        if (typeof window.addGVKMapControls === "function") {
-
-            window.addGVKMapControls();
-
-        }
-
-        // 10. Zoom to Surge points
-        const bounds = surgeLayer.getBounds();
-
-        if (bounds.isValid()) {
-
-            map.fitBounds(bounds, {
-                padding: [25, 25]
-            });
-
-        }
-
-        console.log("GVK Surge layer successfully added!");
+        console.log("Surge dataset:", dataset);
+        console.log("Surge information:", info);
+        console.log("Feature count:", info.layers?.[0]?.featureCount);
 
     } catch (error) {
 
-        console.error("Surge loading failed:", error);
+        console.error("Surge initialisation failed:", error);
 
     }
 
-});
+}
+
+window.gvkSurgeReady = initialiseSurge();

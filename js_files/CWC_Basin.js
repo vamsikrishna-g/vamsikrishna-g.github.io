@@ -83,8 +83,13 @@ import { deserialize } from "https://esm.sh/flatgeobuf@4.6.0/geojson";
 
             // FlatGeobuf 4.6.0 requires rect inside options.
             const iterator = deserialize(CWC_FGB_PATH, {
-                rect: bbox
-            });
+    rect: bbox,
+    headerMetaFn: (header) => {
+        console.log("CWC FlatGeobuf header:", header);
+        console.log("CWC file CRS:", header.crs);
+        console.log("CWC file extent:", header.envelope);
+    }
+});
 
             let featureCount = 0;
 

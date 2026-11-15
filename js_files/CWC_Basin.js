@@ -287,28 +287,23 @@ function initialiseCWCBasin() {
 
 
 /* =========================================
-   START AFTER MAP INITIALISATION
+   START WHEN GVK MAP IS READY
 ========================================= */
 
 function startCWCBasin() {
 
-    if (!window.gvkMap) {
-        console.error("CWC: GVK map unavailable.");
+    if (window.gvkMap) {
+        initialiseCWCBasin();
         return;
     }
 
-    initialiseCWCBasin();
-}
+    console.log("CWC: Waiting for GVK map...");
 
-if (document.readyState === "loading") {
-
-    document.addEventListener(
-        "DOMContentLoaded",
-        startCWCBasin,
+    window.addEventListener(
+        "gvk-map-ready",
+        initialiseCWCBasin,
         { once: true }
     );
-
-} else {
-
-    startCWCBasin();
 }
+
+startCWCBasin();

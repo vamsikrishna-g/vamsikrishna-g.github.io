@@ -1,364 +1,390 @@
 
+import { deserialize } from "https://esm.sh/flatgeobuf@4.6.0/geojson";
+
 /* =========================================
    GVK CANALS
-   28 FlatGeobuf files
+   26 FlatGeobuf files
    Direct spatial-index queries
    Leaflet viewport loading
 ========================================= */
 
-window.gvkCanalsLayer = null;
+(() => {
 
-const CANALS_CONFIG = {
-    manifest: "./data/Canals/canals.json",
-    folder: "./data/Canals/",
+    // -------------------------------------
+    // CONFIGURATION
+    // -------------------------------------
 
-    // Maximum simultaneous FGB queries
-    concurrency: 4,
+    const CANALS_CONFIG = {
+        manifest: "./data/Canals/canals.json",
+        folder: "./data/Canals/",
 
-    // Wait after map movement before querying
-    debounce: 500,
+        // Maximum simultaneous FGB queries
+        concurrency: 4,
 
-    style: {
-        color: "#00a6a6",
-        weight: 1.5,
-        opacity: 0.9,
-        fillOpacity: 0.15
-    }
-};
+        // Wait after map movement before querying
+        debounce: 500,
 
-let canalFiles = [];
-let canalRequestId = 0;
-let canalTimer = null;
-let canalLoading = false;
-let canalPending = false;
-let canalInitialized = false;
+        style: {
+            color: "#00a6a6",
+            weight: 1.5,
+            opacity: 0.9,
+            fillOpacity: 0.15
+        }
+    };
 
+    let map = null;
+    let canalsLayer = null;
 
-/* =========================================
-   INITIALISE CANALS
-========================================= */
+    let canalFiles = [];
 
-async function initialiseCanals() {
+    let canalRequestId = 0;
+    let canalTimer = null;
 
-    if (canalInitialized) return;
+    let canalLoading = false;
+    let canalPending = false;
 
-    if (!window.gvkMap) {
-        console.error("Canals: GVK map is unavailable.");
-        return;
-    }
-
-    if (typeof flatgeobuf === "undefined") {
-        console.error("Canals: FlatGeobuf library is unavailable.");
-        return;
-    }
-
-    canalInitialized = true;
-
-    const map = window.gvkMap;
-
-    // Empty group shown in the layer control.
-    const canalsLayer = L.layerGroup();
-
-    window.gvkCanalsLayer = canalsLayer;
-
-    window.gvkOverlayLayers =
-        window.gvkOverlayLayers || {};
-
-    window.gvkOverlayLayers["Canals"] = canalsLayer;
+    let canalInitialized = false;
+    let canalInitializing = false;
 
 
-    /* =====================================
-       REGISTER LAYER CONTROL
-    ===================================== */
+    // -------------------------------------
+    // INITIALISE CANALS
+    // -------------------------------------
 
-    if (window.gvkLayerControl) {
+    async function initialiseCanals() {
+
+        if (canalInitialized || canalInitializing) {
+            return;
+        }
+
+        if (!window.gvkMap || !window.gvkLayerControl) {
+            console.error(
+                "Canals: GVK map or layer control unavailable."
+            );
+            return;
+        }
+
+        canalInitializing = true;
+
+        map = window.gvkMap;
+
+        // ---------------------------------
+        // LOAD MANIFEST
+        // ---------------------------------
+
+        try {
+
+            const response = await fetch(
+                CANALS_CONFIG.manifest
+            );
+
+            if (!response.ok) {
+                throw new Error(
+                    `Manifest loading failed: ${response.status}`
+                );
+            }
+
+            const files = await response.json();
+
+            if (!Array.isArray(files) || files.length === 0) {
+                throw new Error(
+                    "Canal manifest is empty or invalid."
+                );
+            }
+
+            canalFiles = files.map(name =>
+                CANALS_CONFIG.folder + name
+            );
+
+            console.log(
+                `Canals: ${canalFiles.length} FGB files registered.`
+            );
+
+        } catch (error) {
+
+            canalInitializing = false;
+
+            console.error(
+                "Canals manifest error:",
+                error
+            );
+
+            return;
+        }
+
+
+        // ---------------------------------
+        // CREATE EMPTY LAYER
+        // ---------------------------------
+
+        canalsLayer = L.layerGroup();
+
+        window.gvkCanalsLayer = canalsLayer;
+
+        window.gvkOverlayLayers =
+            window.gvkOverlayLayers || {};
+
+        window.gvkOverlayLayers["Canals"] = canalsLayer;
+
+
+        // ---------------------------------
+        // REGISTER LAYER CONTROL
+        // ---------------------------------
 
         window.gvkLayerControl.addOverlay(
             canalsLayer,
             "Canals"
         );
 
-    } else if (
-        typeof window.addGVKMapControls === "function"
-    ) {
 
-        window.addGVKMapControls();
-    }
+        // ---------------------------------
+        // CURRENT MAP BOUNDING BOX
+        // ---------------------------------
 
+        function getCanalBounds() {
 
-    /* =====================================
-       LOAD FILE MANIFEST
-    ===================================== */
+            const bounds = map.getBounds();
 
-    try {
-
-        const response = await fetch(CANALS_CONFIG.manifest);
-
-        if (!response.ok) {
-            throw new Error(
-                `Manifest loading failed: ${response.status}`
-            );
+            return {
+                minX: bounds.getWest(),
+                minY: bounds.getSouth(),
+                maxX: bounds.getEast(),
+                maxY: bounds.getNorth()
+            };
         }
 
-        const files = await response.json();
 
-        if (!Array.isArray(files) || files.length === 0) {
-            throw new Error("Canal manifest is empty or invalid.");
-        }
+        // ---------------------------------
+        // QUERY ONE FGB FILE
+        // ---------------------------------
 
-        canalFiles = files.map(name =>
-            CANALS_CONFIG.folder + name
-        );
+        async function queryCanalFile(
+            url,
+            bbox,
+            targetLayer,
+            requestId
+        ) {
 
-        console.log(
-            `Canals: ${canalFiles.length} FGB files registered.`
-        );
+            let count = 0;
 
-    }
-    catch (error) {
+            try {
 
-        console.error("Canals manifest error:", error);
-        return;
-    }
-
-
-    /* =====================================
-       CURRENT MAP BOUNDING BOX
-    ===================================== */
-
-    function getCanalBounds() {
-
-        const bounds = map.getBounds();
-
-        return {
-            minX: bounds.getWest(),
-            minY: bounds.getSouth(),
-            maxX: bounds.getEast(),
-            maxY: bounds.getNorth()
-        };
-    }
-
-
-    /* =====================================
-       QUERY ONE FGB FILE
-    ===================================== */
-
-    async function queryCanalFile(url, bbox, targetLayer, requestId) {
-
-        let count = 0;
-
-        try {
-
-            // FlatGeobuf uses its internal spatial index.
-            // The rect filter allows range-based retrieval.
-            const iterator = flatgeobuf.deserialize(
-                url,
-                {
+                const iterator = deserialize(url, {
                     rect: bbox
-                }
-            );
+                });
 
-            for await (const feature of iterator) {
+                for await (const feature of iterator) {
 
-                // Ignore results from outdated map extents.
-                if (requestId !== canalRequestId) {
-                    break;
-                }
-
-                if (!feature || !feature.geometry) continue;
-
-                L.geoJSON(feature, {
-                    style: CANALS_CONFIG.style,
-
-                    onEachFeature: function (feature, layer) {
-
-                        const popup = document.createElement("div");
-
-                        Object.entries(
-                            feature.properties || {}
-                        ).forEach(([key, value]) => {
-
-                            const line = document.createElement("div");
-                            const label = document.createElement("strong");
-
-                            label.textContent = key + ": ";
-
-                            line.append(
-                                label,
-                                document.createTextNode(
-                                    String(value ?? "")
-                                )
-                            );
-
-                            popup.appendChild(line);
-                        });
-
-                        layer.bindPopup(popup);
+                    // Ignore outdated map requests.
+                    if (requestId !== canalRequestId) {
+                        break;
                     }
 
-                }).addTo(targetLayer);
+                    if (!feature || !feature.geometry) {
+                        continue;
+                    }
 
-                count++;
-            }
+                    L.geoJSON(feature, {
 
-        }
-        catch (error) {
+                        style: CANALS_CONFIG.style,
 
-            // One failed file should not stop the other 27.
-            console.error(
-                "Canal file query failed:",
-                url,
-                error
-            );
-        }
+                        onEachFeature: function (feature, layer) {
 
-        return count;
-    }
+                            const popup =
+                                document.createElement("div");
 
+                            Object.entries(
+                                feature.properties || {}
+                            ).forEach(([key, value]) => {
 
-    /* =====================================
-       QUERY ALL FILES
-       WITH LIMITED CONCURRENCY
-    ===================================== */
+                                const line =
+                                    document.createElement("div");
 
-    async function loadVisibleCanals() {
+                                const label =
+                                    document.createElement("strong");
 
-        if (!map.hasLayer(canalsLayer)) return;
+                                label.textContent = key + ": ";
 
-        if (canalLoading) {
-            canalPending = true;
-            return;
-        }
+                                line.append(
+                                    label,
+                                    document.createTextNode(
+                                        String(value ?? "")
+                                    )
+                                );
 
-        canalLoading = true;
-        canalPending = false;
+                                popup.appendChild(line);
+                            });
 
-        const requestId = ++canalRequestId;
+                            layer.bindPopup(popup);
+                        }
 
-        const bbox = getCanalBounds();
+                    }).addTo(targetLayer);
 
-        // Build a temporary group. Keep old features visible
-        // until the new query finishes.
-        const nextLayer = L.layerGroup();
+                    count++;
+                }
 
-        let totalFeatures = 0;
-        let nextFileIndex = 0;
+            } catch (error) {
 
-        console.log("Canals: querying visible extent", bbox);
-
-        async function worker() {
-
-            while (true) {
-
-                if (requestId !== canalRequestId) return;
-
-                const index = nextFileIndex++;
-
-                if (index >= canalFiles.length) return;
-
-                const url = canalFiles[index];
-
-                const count = await queryCanalFile(
+                // A failed state file should not stop other files.
+                console.error(
+                    "Canal file query failed:",
                     url,
-                    bbox,
-                    nextLayer,
-                    requestId
+                    error
                 );
-
-                totalFeatures += count;
             }
+
+            return count;
         }
 
-        try {
 
-            const workerCount = Math.min(
-                CANALS_CONFIG.concurrency,
-                canalFiles.length
-            );
+        // ---------------------------------
+        // QUERY ALL FILES
+        // LIMITED CONCURRENCY
+        // ---------------------------------
 
-            await Promise.all(
-                Array.from(
-                    { length: workerCount },
-                    () => worker()
-                )
-            );
+        async function loadVisibleCanals() {
 
-            // Do not display stale results.
-            if (requestId !== canalRequestId) return;
+            if (!map.hasLayer(canalsLayer)) {
+                return;
+            }
 
-            // Replace previous visible features.
-            canalsLayer.clearLayers();
+            if (canalLoading) {
+                canalPending = true;
+                return;
+            }
 
-            nextLayer.eachLayer(layer => {
-                canalsLayer.addLayer(layer);
-            });
+            canalLoading = true;
+            canalPending = false;
+
+            const requestId = ++canalRequestId;
+
+            const bbox = getCanalBounds();
+
+            // Temporary group:
+            // Existing features remain visible until
+            // the new viewport query is complete.
+            const nextLayer = L.layerGroup();
+
+            let totalFeatures = 0;
+            let nextFileIndex = 0;
 
             console.log(
-                "Canals: visible features:",
-                totalFeatures
+                "Canals: Querying visible extent:",
+                bbox
             );
 
-        }
-        catch (error) {
 
-            console.error("Canal loading error:", error);
+            async function worker() {
 
-        }
-        finally {
+                while (true) {
 
-            canalLoading = false;
+                    if (requestId !== canalRequestId) {
+                        return;
+                    }
 
-            if (
-                canalPending &&
-                map.hasLayer(canalsLayer)
-            ) {
-                scheduleCanalRefresh();
+                    const index = nextFileIndex++;
+
+                    if (index >= canalFiles.length) {
+                        return;
+                    }
+
+                    const url = canalFiles[index];
+
+                    const count = await queryCanalFile(
+                        url,
+                        bbox,
+                        nextLayer,
+                        requestId
+                    );
+
+                    totalFeatures += count;
+                }
+            }
+
+
+            try {
+
+                const workerCount = Math.min(
+                    CANALS_CONFIG.concurrency,
+                    canalFiles.length
+                );
+
+                await Promise.all(
+                    Array.from(
+                        { length: workerCount },
+                        () => worker()
+                    )
+                );
+
+                // Do not display outdated results.
+                if (requestId !== canalRequestId) {
+                    return;
+                }
+
+                // Replace previous visible features.
+                canalsLayer.clearLayers();
+
+                nextLayer.eachLayer(layer => {
+                    canalsLayer.addLayer(layer);
+                });
+
+                console.log(
+                    "Canals: Visible features:",
+                    totalFeatures
+                );
+
+            } catch (error) {
+
+                console.error(
+                    "Canal loading error:",
+                    error
+                );
+
+            } finally {
+
+                canalLoading = false;
+
+                // If the map moved during loading,
+                // run another query for the latest extent.
+                if (
+                    canalPending &&
+                    map.hasLayer(canalsLayer)
+                ) {
+                    scheduleCanalRefresh();
+                }
             }
         }
-    }
 
 
-    /* =====================================
-       DEBOUNCED REFRESH
-    ===================================== */
+        // ---------------------------------
+        // DEBOUNCED REFRESH
+        // ---------------------------------
 
-    function scheduleCanalRefresh() {
+        function scheduleCanalRefresh() {
 
-        clearTimeout(canalTimer);
+            clearTimeout(canalTimer);
 
-        canalTimer = setTimeout(
-            loadVisibleCanals,
-            CANALS_CONFIG.debounce
-        );
-    }
-
-
-    /* =====================================
-       MAP EVENTS
-    ===================================== */
-
-    // Reload features after pan or zoom.
-    map.on("moveend", function () {
-
-        if (map.hasLayer(canalsLayer)) {
-            scheduleCanalRefresh();
+            canalTimer = setTimeout(
+                loadVisibleCanals,
+                CANALS_CONFIG.debounce
+            );
         }
-    });
 
 
-    // User enables Canals in layer control.
-    map.on("overlayadd", function (event) {
+        // ---------------------------------
+        // LAYER EVENTS
+        // ---------------------------------
 
-        if (event.layer === canalsLayer) {
+        // User enables Canals.
+        canalsLayer.on("add", function () {
+
             scheduleCanalRefresh();
-        }
-    });
+
+        });
 
 
-    // User disables Canals.
-    map.on("overlayremove", function (event) {
-
-        if (event.layer === canalsLayer) {
+        // User disables Canals.
+        canalsLayer.on("remove", function () {
 
             clearTimeout(canalTimer);
 
@@ -369,22 +395,57 @@ async function initialiseCanals() {
 
             canalsLayer.clearLayers();
 
+        });
+
+
+        // Reload after map movement.
+        map.on("moveend", function () {
+
+            if (map.hasLayer(canalsLayer)) {
+                scheduleCanalRefresh();
+            }
+
+        });
+
+
+        // ---------------------------------
+        // COMPLETE INITIALIZATION
+        // ---------------------------------
+
+        canalInitialized = true;
+        canalInitializing = false;
+
+        console.log(
+            "GVK Canals layer initialized (OFF by default)."
+        );
+
+    }
+
+
+    // -------------------------------------
+    // START
+    // -------------------------------------
+
+    function startCanals() {
+
+        if (window.gvkMap && window.gvkLayerControl) {
+
+            initialiseCanals();
+
+            return;
         }
-    });
 
+        console.log(
+            "Canals: Waiting for GVK map and layer control..."
+        );
 
-    // OFF by default.
-    // Do not add canalsLayer to the map.
+        window.addEventListener(
+            "gvk-map-ready",
+            initialiseCanals,
+            { once: true }
+        );
+    }
 
-    console.log("GVK Canals layer initialised.");
-}
+    startCanals();
 
-
-/* =========================================
-   START
-========================================= */
-
-document.addEventListener(
-    "DOMContentLoaded",
-    initialiseCanals
-);
+})();

@@ -7,7 +7,7 @@ import { deserialize } from "https://esm.sh/flatgeobuf@4.6.0/geojson";
     // CONFIGURATION
     // -----------------------------------------
 
-    const FGB_PATH = "./data/NIO_Observation/NIO_Observation.fgb";
+    const FGB_PATH = "./data/NIO_Obs/NIO_Observation.fgb";
     const LAYER_NAME = "NIO Observations";
 
     let map = null;

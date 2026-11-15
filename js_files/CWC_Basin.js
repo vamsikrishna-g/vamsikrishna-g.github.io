@@ -1,309 +1,231 @@
 
-/* =========================================
-   GVK CWC BASINS
-   Direct FlatGeobuf 4.6.0
-   Spatial Index + Leaflet
-========================================= */
+import { deserialize } from "https://esm.sh/flatgeobuf@4.6.0/geojson";
 
-import { deserialize } from
-    "https://esm.sh/flatgeobuf@4.6.0/geojson";
+(() => {
 
-window.gvkCwcbasinLayer = null;
+    // --------------------------------------------------
+    // Configuration
+    // --------------------------------------------------
 
-const CWC_FGB_PATH = "./data/CWC_Basin/CWC_Basin.fgb";
+    const CWC_FGB_PATH = "./data/CWC_Basin/CWC_Basin.fgb";
+    const LAYER_NAME = "CWC Basins";
 
-const CWC_STYLE = {
-    color: "#1769aa",
-    weight: 1.5,
-    opacity: 0.9,
-    fillColor: "#42a5f5",
-    fillOpacity: 0.18
-};
+    let map = null;
+    let basinLayer = null;
+    let requestId = 0;
+    let initialized = false;
 
-const CWC_DEBOUNCE = 400;
+    // --------------------------------------------------
+    // Styling
+    // --------------------------------------------------
 
-let cwcTimer = null;
-let cwcRequestId = 0;
-let cwcLoading = false;
-let cwcPending = false;
-let cwcInitialized = false;
+    const basinStyle = {
+        color: "#1687c9",
+        weight: 1.2,
+        opacity: 0.9,
+        fillColor: "#38a9e0",
+        fillOpacity: 0.18
+    };
 
+    // --------------------------------------------------
+    // Popup
+    // --------------------------------------------------
 
-/* =========================================
-   POPUP
-========================================= */
+    function createPopup(feature) {
 
-function createCWCPopup(properties) {
+        const properties = feature.properties || {};
 
-    const popup = document.createElement("div");
+        let content = "<b>CWC Basin</b>";
 
-    Object.entries(properties || {}).forEach(
-        ([key, value]) => {
+        for (const [key, value] of Object.entries(properties)) {
 
-            const line = document.createElement("div");
-            const label = document.createElement("strong");
+            if (value === null || value === undefined || value === "") {
+                continue;
+            }
 
-            label.textContent = key + ": ";
-
-            line.append(
-                label,
-                document.createTextNode(String(value ?? ""))
-            );
-
-            popup.appendChild(line);
+            content += `<br><b>${key}:</b> ${String(value)}`;
         }
-    );
 
-    return popup;
-}
-
-
-/* =========================================
-   INITIALISE CWC BASINS
-========================================= */
-
-function initialiseCWCBasin() {
-
-    if (cwcInitialized) return;
-
-    if (!window.gvkMap) {
-        console.error("CWC: GVK map unavailable.");
-        return;
+        return content;
     }
 
-    if (typeof L === "undefined") {
-        console.error("CWC: Leaflet unavailable.");
-        return;
-    }
+    // --------------------------------------------------
+    // Load basins intersecting the current map view
+    // --------------------------------------------------
 
-    cwcInitialized = true;
+    async function loadVisibleBasins() {
 
-    const map = window.gvkMap;
-
-
-    /* =====================================
-       CREATE EMPTY LEAFLET LAYER
-    ===================================== */
-
-    const basinLayer = L.geoJSON(null, {
-
-        style: CWC_STYLE,
-
-        onEachFeature: function (feature, layer) {
-
-            layer.bindPopup(
-                createCWCPopup(feature.properties)
-            );
+        if (!map || !basinLayer || !map.hasLayer(basinLayer)) {
+            return;
         }
-    });
 
-    window.gvkCwcbasinLayer = basinLayer;
-
-
-    /* =====================================
-       REGISTER LAYER CONTROL
-    ===================================== */
-
-    window.gvkOverlayLayers =
-        window.gvkOverlayLayers || {};
-
-    window.gvkOverlayLayers["CWC Basins"] = basinLayer;
-
-    if (window.gvkLayerControl) {
-
-        window.gvkLayerControl.addOverlay(
-            basinLayer,
-            "CWC Basins"
-        );
-
-    } else if (
-        typeof window.addGVKMapControls === "function"
-    ) {
-
-        window.addGVKMapControls();
-    }
-
-
-    /* =====================================
-       GET MAP BOUNDING BOX
-    ===================================== */
-
-    function getCWCBounds() {
+        const currentRequest = ++requestId;
 
         const bounds = map.getBounds();
 
-        return {
+        // FlatGeobuf rectangle coordinates:
+        // minX = west, minY = south,
+        // maxX = east, maxY = north.
+
+        const bbox = {
             minX: bounds.getWest(),
             minY: bounds.getSouth(),
             maxX: bounds.getEast(),
             maxY: bounds.getNorth()
         };
-    }
 
+        console.log("CWC: Loading basins for map extent:", bbox);
 
-    /* =====================================
-       LOAD VISIBLE FEATURES
-    ===================================== */
-
-    async function loadVisibleBasins() {
-
-        if (!map.hasLayer(basinLayer)) return;
-
-        if (cwcLoading) {
-            cwcPending = true;
-            return;
-        }
-
-        cwcLoading = true;
-        cwcPending = false;
-
-        const requestId = ++cwcRequestId;
-        const bbox = getCWCBounds();
-
-        const features = [];
-
-        console.log("CWC: Querying extent:", bbox);
+        // Remove features from the previous map extent.
+        basinLayer.clearLayers();
 
         try {
 
-            // Read original FlatGeobuf directly.
-            // The bounding box filters the spatial query.
+            // FlatGeobuf 4.6.0 requires rect inside options.
+            const iterator = deserialize(CWC_FGB_PATH, {
+                rect: bbox
+            });
 
-            const iterator = deserialize(
-                CWC_FGB_PATH,
-                bbox
-            );
+            let featureCount = 0;
 
             for await (const feature of iterator) {
 
-                if (requestId !== cwcRequestId) {
-                    break;
+                // Ignore results from an older map request.
+                if (currentRequest !== requestId) {
+                    return;
                 }
 
-                if (feature && feature.geometry) {
-                    features.push(feature);
+                if (!feature || !feature.geometry) {
+                    continue;
                 }
+
+                L.geoJSON(feature, {
+
+                    style: basinStyle,
+
+                    onEachFeature: function (feature, layer) {
+                        layer.bindPopup(createPopup(feature));
+                    }
+
+                }).addTo(basinLayer);
+
+                featureCount++;
             }
 
-            // Render only the latest query results.
-            if (requestId === cwcRequestId) {
-
-                basinLayer.clearLayers();
-
-                if (features.length > 0) {
-
-                    basinLayer.addData({
-                        type: "FeatureCollection",
-                        features: features
-                    });
-                }
-
-                console.log(
-                    "CWC: Visible features:",
-                    features.length
-                );
+            // Do not report an outdated request.
+            if (currentRequest !== requestId) {
+                return;
             }
 
-        }
-        catch (error) {
-
-            console.error(
-                "CWC: FlatGeobuf query failed:",
-                error
+            console.log(
+                "CWC: Basin features displayed:",
+                featureCount
             );
 
-        }
-        finally {
+        } catch (error) {
 
-            cwcLoading = false;
-
-            if (
-                cwcPending &&
-                map.hasLayer(basinLayer)
-            ) {
-                scheduleCWCRefresh();
+            if (currentRequest === requestId) {
+                console.error(
+                    "CWC: FlatGeobuf query failed:",
+                    error
+                );
             }
         }
     }
 
+    // --------------------------------------------------
+    // Initialize CWC layer
+    // --------------------------------------------------
 
-    /* =====================================
-       DEBOUNCED REFRESH
-    ===================================== */
+    function initialiseCWCBasin() {
 
-    function scheduleCWCRefresh() {
+        if (initialized) {
+            return;
+        }
 
-        clearTimeout(cwcTimer);
+        if (!window.gvkMap) {
+            console.error("CWC: GVK map unavailable.");
+            return;
+        }
 
-        cwcTimer = setTimeout(
-            loadVisibleBasins,
-            CWC_DEBOUNCE
+        if (typeof L === "undefined") {
+            console.error("CWC: Leaflet unavailable.");
+            return;
+        }
+
+        map = window.gvkMap;
+
+        // Create the layer without adding it to the map.
+        // Therefore, it remains OFF by default.
+        basinLayer = L.layerGroup();
+
+        // Register it in the GVK overlay collection.
+        window.gvkOverlayLayers = window.gvkOverlayLayers || {};
+        window.gvkOverlayLayers[LAYER_NAME] = basinLayer;
+
+        // Add it to the existing layer control.
+        if (window.gvkLayerControl) {
+
+            window.gvkLayerControl.addOverlay(
+                basinLayer,
+                LAYER_NAME
+            );
+
+        } else {
+
+            console.warn(
+                "CWC: Layer control unavailable; overlay registered but not displayed in control."
+            );
+        }
+
+        // Load features when the user switches the layer ON.
+        basinLayer.on("add", function () {
+            loadVisibleBasins();
+        });
+
+        // Invalidate previous requests when the layer is switched OFF.
+        basinLayer.on("remove", function () {
+            requestId++;
+            basinLayer.clearLayers();
+        });
+
+        // Reload the visible extent after map movement,
+        // but only while the CWC layer is ON.
+        map.on("moveend", function () {
+
+            if (map.hasLayer(basinLayer)) {
+                loadVisibleBasins();
+            }
+
+        });
+
+        initialized = true;
+
+        console.log(
+            "CWC: Basin layer registered successfully (OFF by default)."
         );
     }
 
+    // --------------------------------------------------
+    // Wait for GVK map initialization
+    // --------------------------------------------------
 
-    /* =====================================
-       MAP EVENTS
-    ===================================== */
+    function startCWCBasin() {
 
-    // Refresh after pan or zoom.
-    map.on("moveend", function () {
-
-        if (map.hasLayer(basinLayer)) {
-            scheduleCWCRefresh();
+        if (window.gvkMap && window.gvkLayerControl) {
+            initialiseCWCBasin();
+            return;
         }
-    });
 
+        console.log("CWC: Waiting for GVK map and layer control...");
 
-    // Load when CWC Basins is switched ON.
-    map.on("overlayadd", function (event) {
-
-        if (event.layer === basinLayer) {
-            scheduleCWCRefresh();
-        }
-    });
-
-
-    // Clear features when switched OFF.
-    map.on("overlayremove", function (event) {
-
-        if (event.layer === basinLayer) {
-
-            clearTimeout(cwcTimer);
-
-            cwcRequestId++;
-            cwcPending = false;
-
-            basinLayer.clearLayers();
-        }
-    });
-
-
-    // Do not add basinLayer to the map.
-    // CWC Basins is OFF by default.
-
-    console.log("CWC Basins direct FGB initialised.");
-}
-
-
-/* =========================================
-   START WHEN GVK MAP IS READY
-========================================= */
-
-function startCWCBasin() {
-
-    if (window.gvkMap) {
-        initialiseCWCBasin();
-        return;
+        window.addEventListener(
+            "gvk-map-ready",
+            initialiseCWCBasin,
+            { once: true }
+        );
     }
 
-    console.log("CWC: Waiting for GVK map...");
+    startCWCBasin();
 
-    window.addEventListener(
-        "gvk-map-ready",
-        initialiseCWCBasin,
-        { once: true }
-    );
-}
-
-startCWCBasin();
+})();

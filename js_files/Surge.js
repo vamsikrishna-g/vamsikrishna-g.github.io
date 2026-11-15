@@ -238,7 +238,7 @@ async function initialiseSurge() {
 
 
         // 9. Add Surge to map
-        surgeLayer.addTo(window.gvkMap);
+        //surgeLayer.addTo(window.gvkMap);
 
 
         // 10. Update existing layer control

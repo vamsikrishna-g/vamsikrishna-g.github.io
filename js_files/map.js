@@ -15,6 +15,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const esri = window.GVK_BASEMAPS.EsriWorldImagery().addTo(map);
 
     window.gvkMap = map;
+    // Notify other map layers that Leaflet is ready
+    window.dispatchEvent(new Event("gvk-map-ready"));
 
     window.gvkBaseLayers = {
         "Esri World Imagery": esri,

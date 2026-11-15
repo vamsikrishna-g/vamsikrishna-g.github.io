@@ -64,9 +64,9 @@ async function loadManifest() {
 
     const files = await response.json();
 
-    if (!Array.isArray(files) || files.length !== 102) {
+    if (!Array.isArray(files) || files.length !== 101) {
         throw new Error(
-            `Expected 102 watershed files; received ${
+            `Expected 101 watershed files; received ${
                 Array.isArray(files) ? files.length : "invalid manifest"
             }.`
         );

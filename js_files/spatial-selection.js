@@ -3,9 +3,9 @@ import { deserialize } from "https://esm.sh/flatgeobuf@4.6.0/geojson";
 import { booleanWithin } from "https://esm.sh/@turf/boolean-within@7.2.0";
 import { booleanIntersects } from "https://esm.sh/@turf/boolean-intersects@7.2.0";
 
-// --------------------------------------------------
+// ==================================================
 // GVK SPATIAL SELECTION
-// --------------------------------------------------
+// ==================================================
 
 const MAX_CONCURRENT = 3;
 
@@ -52,18 +52,26 @@ const DATASETS = [
     }
 ];
 
+// ==================================================
+// GLOBAL VARIABLES
+// ==================================================
+
 let map = null;
 let drawnItems = null;
 let selectedAOI = null;
+
 let resultsLayer = null;
+
 let queryRunning = false;
 let queryId = 0;
 
 let queryMode = "intersects";
 
-// --------------------------------------------------
+let gdalInstance = null;
+
+// ==================================================
 // LOAD DATASET FILE LISTS
-// --------------------------------------------------
+// ==================================================
 
 async function loadDatasetFiles() {
 
@@ -92,16 +100,16 @@ async function loadDatasetFiles() {
 
     console.log(
         "GVK Spatial Selection: Dataset manifests loaded.",
-        DATASETS.map(d => ({
-            name: d.name,
-            files: d.files.length
+        DATASETS.map(dataset => ({
+            name: dataset.name,
+            files: dataset.files.length
         }))
     );
 }
 
-// --------------------------------------------------
+// ==================================================
 // CREATE RESULTS OVERLAY
-// --------------------------------------------------
+// ==================================================
 
 function createResultsLayer() {
 
@@ -118,9 +126,9 @@ function createResultsLayer() {
     window.gvkSpatialResultsLayer = resultsLayer;
 }
 
-// --------------------------------------------------
+// ==================================================
 // VALIDATE AOI
-// --------------------------------------------------
+// ==================================================
 
 function getAOIGeoJSON() {
 
@@ -146,9 +154,9 @@ function getAOIGeoJSON() {
     return aoi;
 }
 
-// --------------------------------------------------
-// POPUP
-// --------------------------------------------------
+// ==================================================
+// CREATE POPUP
+// ==================================================
 
 function createPopup(properties, source) {
 
@@ -156,6 +164,7 @@ function createPopup(properties, source) {
 
     const heading = document.createElement("strong");
     heading.textContent = source;
+
     container.appendChild(heading);
 
     Object.entries(properties || {}).forEach(
@@ -169,6 +178,7 @@ function createPopup(properties, source) {
             label.textContent = `${key}: `;
 
             row.appendChild(label);
+
             row.appendChild(
                 document.createTextNode(
                     value == null ? "" : String(value)
@@ -182,9 +192,9 @@ function createPopup(properties, source) {
     return container;
 }
 
-// --------------------------------------------------
+// ==================================================
 // EXACT SPATIAL PREDICATE
-// --------------------------------------------------
+// ==================================================
 
 function matchesAOI(feature, aoi) {
 
@@ -211,15 +221,16 @@ function matchesAOI(feature, aoi) {
     }
 }
 
-// --------------------------------------------------
+// ==================================================
 // ADD MATCHING FEATURE TO RESULTS
-// --------------------------------------------------
+// ==================================================
 
 function addResult(feature, datasetName) {
 
     const result = {
         type: "Feature",
         geometry: feature.geometry,
+
         properties: {
             ...(feature.properties || {}),
             _gvk_source: datasetName
@@ -237,8 +248,7 @@ function addResult(feature, datasetName) {
             const type = feature.geometry?.type || "";
 
             if (
-                type.includes("Line") ||
-                type === "MultiLineString"
+                type.includes("Line")
             ) {
                 return {
                     color: "#e67e22",
@@ -271,10 +281,12 @@ function addResult(feature, datasetName) {
     layer.eachLayer(function (child) {
 
         child.bindPopup(function () {
+
             return createPopup(
                 result.properties,
                 datasetName
             );
+
         });
 
     });
@@ -282,9 +294,9 @@ function addResult(feature, datasetName) {
     layer.addTo(resultsLayer);
 }
 
-// --------------------------------------------------
+// ==================================================
 // QUERY ONE FGB FILE
-// --------------------------------------------------
+// ==================================================
 
 async function queryOneFile(
     dataset,
@@ -316,11 +328,16 @@ async function queryOneFile(
     }
 }
 
-// --------------------------------------------------
+// ==================================================
 // CONCURRENT FILE PROCESSING
-// --------------------------------------------------
+// ==================================================
 
-async function runTasks(tasks, worker, currentQuery) {
+async function runTasks(
+    tasks,
+    worker,
+    currentQuery,
+    failedFiles
+) {
 
     let index = 0;
 
@@ -339,7 +356,11 @@ async function runTasks(tasks, worker, currentQuery) {
 
             } catch (error) {
 
-                console.error(
+                failedFiles.push(
+                    `${task.dataset.name}/${task.filename}`
+                );
+
+                console.warn(
                     `Spatial query failed: ${task.dataset.name} / ${task.filename}`,
                     error
                 );
@@ -360,9 +381,9 @@ async function runTasks(tasks, worker, currentQuery) {
     await Promise.all(workers);
 }
 
-// --------------------------------------------------
+// ==================================================
 // RUN SPATIAL QUERY
-// --------------------------------------------------
+// ==================================================
 
 async function runSpatialQuery() {
 
@@ -414,8 +435,8 @@ async function runSpatialQuery() {
         }
 
         const counts = {};
-
         const tasks = [];
+        const failedFiles = [];
 
         DATASETS.forEach(dataset => {
 
@@ -437,6 +458,7 @@ async function runSpatialQuery() {
 
         await runTasks(
             tasks,
+
             task => queryOneFile(
                 task.dataset,
                 task.filename,
@@ -445,7 +467,9 @@ async function runSpatialQuery() {
                 currentQuery,
                 counts
             ),
-            currentQuery
+
+            currentQuery,
+            failedFiles
         );
 
         if (currentQuery !== queryId) return;
@@ -461,12 +485,26 @@ async function runSpatialQuery() {
                 `${name}: ${count}`
             );
 
-        status.textContent =
+        let message =
             `${queryMode.toUpperCase()} complete. ` +
-            `${total} features selected.\n` +
-            (report.length
-                ? report.join(" | ")
-                : "No matching features found.");
+            `${total} features selected.\n`;
+
+        message += report.length
+            ? report.join(" | ")
+            : "No matching features found.";
+
+        if (failedFiles.length > 0) {
+
+            message +=
+                `\n\n${failedFiles.length} files could not be read.`;
+
+            console.warn(
+                "Files not processed:",
+                failedFiles
+            );
+        }
+
+        status.textContent = message;
 
         console.log(
             "GVK Spatial Selection Results:",
@@ -485,15 +523,16 @@ async function runSpatialQuery() {
     } finally {
 
         if (currentQuery === queryId) {
+
             queryRunning = false;
             runButton.disabled = false;
         }
     }
 }
 
-// --------------------------------------------------
+// ==================================================
 // CLEAR RESULTS
-// --------------------------------------------------
+// ==================================================
 
 function clearResults() {
 
@@ -510,11 +549,269 @@ function clearResults() {
     document.getElementById(
         "gvk-spatial-run"
     ).disabled = false;
+
+    document.getElementById(
+        "gvk-spatial-download"
+    ).disabled = false;
 }
 
-// --------------------------------------------------
+// ==================================================
+// DOWNLOAD SELECTED FEATURES AS GEOPACKAGE
+// ==================================================
+
+async function downloadGeoPackage() {
+
+    const status = document.getElementById(
+        "gvk-spatial-status"
+    );
+
+    const button = document.getElementById(
+        "gvk-spatial-download"
+    );
+
+    let inputDataset = null;
+
+    try {
+
+        if (
+            !resultsLayer ||
+            resultsLayer.getLayers().length === 0
+        ) {
+            throw new Error(
+                "No selected features available for export."
+            );
+        }
+
+        button.disabled = true;
+
+        status.textContent =
+            "Preparing GeoPackage...";
+
+        // ------------------------------------------
+        // Collect selected features
+        // ------------------------------------------
+
+        const geojson = resultsLayer.toGeoJSON();
+
+        if (
+            !geojson.features ||
+            geojson.features.length === 0
+        ) {
+            throw new Error(
+                "No GeoJSON features available for export."
+            );
+        }
+
+        // ------------------------------------------
+        // Preserve source dataset information
+        // ------------------------------------------
+
+        geojson.features.forEach(feature => {
+
+            feature.properties =
+                feature.properties || {};
+
+            feature.properties.source_layer =
+                feature.properties._gvk_source || "Unknown";
+
+            delete feature.properties._gvk_source;
+
+            // Convert nested attributes to strings
+            // for compatibility with GeoPackage fields.
+
+            Object.entries(feature.properties).forEach(
+                ([key, value]) => {
+
+                    if (
+                        value !== null &&
+                        typeof value === "object"
+                    ) {
+                        feature.properties[key] =
+                            JSON.stringify(value);
+                    }
+
+                }
+            );
+
+        });
+
+        // ------------------------------------------
+        // Initialise GDAL
+        // ------------------------------------------
+
+        if (!gdalInstance) {
+
+            if (
+                typeof window.initGdalJs !== "function"
+            ) {
+                throw new Error(
+                    "GDAL3.js is not available. Check the script in index.html."
+                );
+            }
+
+            status.textContent =
+                "Initialising GDAL...";
+
+            gdalInstance = await window.initGdalJs({
+
+                path:
+                    "https://cdn.jsdelivr.net/npm/gdal3.js@2.8.1/dist/package",
+
+                useWorker: false
+
+            });
+        }
+
+        // ------------------------------------------
+        // Create GeoJSON input file
+        // ------------------------------------------
+
+        status.textContent =
+            "Preparing GeoJSON input...";
+
+        const geojsonFile = new File(
+            [JSON.stringify(geojson)],
+            "GVK_Spatial_Selection.geojson",
+            {
+                type: "application/geo+json"
+            }
+        );
+
+        // ------------------------------------------
+        // Open GeoJSON in GDAL
+        // ------------------------------------------
+
+        const opened = await gdalInstance.open(
+            geojsonFile
+        );
+
+        if (
+            !opened ||
+            !opened.datasets ||
+            opened.datasets.length === 0
+        ) {
+            throw new Error(
+                "GDAL could not open the GeoJSON input."
+            );
+        }
+
+        inputDataset = opened.datasets[0];
+
+        // ------------------------------------------
+        // Convert GeoJSON to GeoPackage
+        // ------------------------------------------
+
+        status.textContent =
+            "Creating GeoPackage...";
+
+        const outputPath = await gdalInstance.ogr2ogr(
+
+            inputDataset,
+
+            [
+                "-f", "GPKG",
+                "-nln", "spatial_selection",
+                "-nlt", "GEOMETRY",
+                "-t_srs", "EPSG:4326"
+            ],
+
+            "GVK_Spatial_Selection"
+
+        );
+
+        if (!outputPath) {
+            throw new Error(
+                "GDAL did not produce a GeoPackage output."
+            );
+        }
+
+        // ------------------------------------------
+        // Read GeoPackage bytes
+        // ------------------------------------------
+
+        status.textContent =
+            "Preparing download...";
+
+        const bytes = await gdalInstance.getFileBytes(
+            outputPath
+        );
+
+        if (!bytes || bytes.length === 0) {
+            throw new Error(
+                "GeoPackage output is empty."
+            );
+        }
+
+        // ------------------------------------------
+        // Trigger browser download
+        // ------------------------------------------
+
+        const blob = new Blob(
+            [bytes],
+            {
+                type: "application/geopackage+sqlite3"
+            }
+        );
+
+        const downloadURL =
+            URL.createObjectURL(blob);
+
+        const link = document.createElement("a");
+
+        link.href = downloadURL;
+
+        link.download =
+            "GVK_Spatial_Selection.gpkg";
+
+        document.body.appendChild(link);
+
+        link.click();
+
+        link.remove();
+
+        setTimeout(() => {
+            URL.revokeObjectURL(downloadURL);
+        }, 2000);
+
+        status.textContent =
+            `${geojson.features.length} features exported successfully.`;
+
+        console.log(
+            "GVK GeoPackage exported:",
+            outputPath
+        );
+
+    } catch (error) {
+
+        console.error(
+            "GeoPackage export failed:",
+            error
+        );
+
+        status.textContent =
+            "GeoPackage export failed: " + error.message;
+
+    } finally {
+
+        if (inputDataset && gdalInstance) {
+
+            try {
+                await gdalInstance.close(inputDataset);
+            } catch (error) {
+                console.warn(
+                    "Could not close temporary GDAL dataset:",
+                    error
+                );
+            }
+        }
+
+        button.disabled = false;
+    }
+}
+
+// ==================================================
 // SPATIAL SELECTION CONTROL
-// --------------------------------------------------
+// ==================================================
 
 function createSpatialControl() {
 
@@ -535,30 +832,59 @@ function createSpatialControl() {
         container.style.fontSize = "13px";
 
         container.innerHTML = `
+
             <div style="font-weight:bold; margin-bottom:8px;">
                 Spatial Selection
             </div>
 
-            <select id="gvk-spatial-mode"
+            <select
+                id="gvk-spatial-mode"
                 style="width:100%; margin-bottom:8px;">
-                <option value="intersects">Intersects</option>
-                <option value="within">Within</option>
+
+                <option value="intersects">
+                    Intersects
+                </option>
+
+                <option value="within">
+                    Within
+                </option>
+
             </select>
 
-            <button id="gvk-spatial-run"
+            <button
+                id="gvk-spatial-run"
                 style="width:100%; margin-bottom:6px;">
+
                 Run Selection
+
             </button>
 
-            <button id="gvk-spatial-clear"
+            <button
+                id="gvk-spatial-clear"
                 style="width:100%;">
+
                 Clear Results
+
             </button>
 
-            <div id="gvk-spatial-status"
-                style="margin-top:8px; white-space:pre-wrap;
-                overflow-wrap:anywhere;">
+            <button
+                id="gvk-spatial-download"
+                style="width:100%; margin-top:6px;">
+
+                Download GeoPackage (.gpkg)
+
+            </button>
+
+            <div
+                id="gvk-spatial-status"
+                style="
+                    margin-top:8px;
+                    white-space:pre-wrap;
+                    overflow-wrap:anywhere;
+                ">
+
                 Draw a polygon or rectangle to begin.
+
             </div>
         `;
 
@@ -570,6 +896,10 @@ function createSpatialControl() {
 
     control.addTo(map);
 
+    // ----------------------------------------------
+    // Query mode
+    // ----------------------------------------------
+
     document.getElementById(
         "gvk-spatial-mode"
     ).addEventListener("change", event => {
@@ -578,95 +908,164 @@ function createSpatialControl() {
 
     });
 
+    // ----------------------------------------------
+    // Run selection
+    // ----------------------------------------------
+
     document.getElementById(
         "gvk-spatial-run"
-    ).addEventListener("click", runSpatialQuery);
+    ).addEventListener(
+        "click",
+        runSpatialQuery
+    );
+
+    // ----------------------------------------------
+    // Clear results
+    // ----------------------------------------------
 
     document.getElementById(
         "gvk-spatial-clear"
-    ).addEventListener("click", clearResults);
+    ).addEventListener(
+        "click",
+        clearResults
+    );
+
+    // ----------------------------------------------
+    // Download GeoPackage
+    // ----------------------------------------------
+
+    document.getElementById(
+        "gvk-spatial-download"
+    ).addEventListener(
+        "click",
+        downloadGeoPackage
+    );
 }
 
-// --------------------------------------------------
+// ==================================================
 // DRAWING EVENTS
-// --------------------------------------------------
+// ==================================================
 
 function registerDrawingEvents() {
 
-    map.on(L.Draw.Event.CREATED, function (event) {
+    // ----------------------------------------------
+    // New drawing created
+    // ----------------------------------------------
 
-        selectedAOI = event.layer;
+    map.on(
+        L.Draw.Event.CREATED,
+        function (event) {
 
-        document.getElementById(
-            "gvk-spatial-status"
-        ).textContent =
-            "AOI selected. Choose a predicate and run selection.";
-    });
-
-    map.on(L.Draw.Event.EDITED, function (event) {
-
-        event.layers.eachLayer(function (layer) {
-
-            if (layer === selectedAOI) {
-                selectedAOI = layer;
-            }
-
-        });
-
-    });
-
-    map.on(L.Draw.Event.DELETED, function (event) {
-
-        event.layers.eachLayer(function (layer) {
-
-            if (layer === selectedAOI) {
-                selectedAOI = null;
-            }
-
-        });
-
-        if (!selectedAOI) {
+            selectedAOI = event.layer;
 
             document.getElementById(
                 "gvk-spatial-status"
             ).textContent =
-                "Draw a polygon or rectangle to begin.";
+                "AOI selected. Choose a predicate and run selection.";
+
+            console.log(
+                "GVK Spatial Selection: AOI created.",
+                event.layerType
+            );
         }
-    });
+    );
+
+    // ----------------------------------------------
+    // Drawing edited
+    // ----------------------------------------------
+
+    map.on(
+        L.Draw.Event.EDITED,
+        function (event) {
+
+            event.layers.eachLayer(function (layer) {
+
+                if (layer === selectedAOI) {
+
+                    selectedAOI = layer;
+
+                    document.getElementById(
+                        "gvk-spatial-status"
+                    ).textContent =
+                        "AOI updated. Run selection again.";
+                }
+
+            });
+
+        }
+    );
+
+    // ----------------------------------------------
+    // Drawing deleted
+    // ----------------------------------------------
+
+    map.on(
+        L.Draw.Event.DELETED,
+        function (event) {
+
+            event.layers.eachLayer(function (layer) {
+
+                if (layer === selectedAOI) {
+                    selectedAOI = null;
+                }
+
+            });
+
+            if (!selectedAOI) {
+
+                document.getElementById(
+                    "gvk-spatial-status"
+                ).textContent =
+                    "Draw a polygon or rectangle to begin.";
+            }
+
+        }
+    );
 }
 
-// --------------------------------------------------
+// ==================================================
 // INITIALISATION
-// --------------------------------------------------
+// ==================================================
 
 function initialiseSpatialSelection() {
 
-    if (window.gvkSpatialSelectionInitialised) return;
+    if (window.gvkSpatialSelectionInitialised) {
+        return;
+    }
 
     if (
         !window.gvkMap ||
         !window.gvkLayerControl ||
         !window.gvkDrawnItems
     ) {
+
         console.warn(
             "Spatial Selection: Map, layer control or drawing tools unavailable."
         );
+
         return;
     }
 
     map = window.gvkMap;
+
     drawnItems = window.gvkDrawnItems;
 
     createResultsLayer();
+
     createSpatialControl();
+
     registerDrawingEvents();
 
     window.gvkSpatialSelectionInitialised = true;
 
     console.log(
-        "GVK Spatial Selection initialised."
+        "GVK Spatial Selection initialised successfully."
     );
 }
+
+// ==================================================
+// WAIT FOR MAP AND DRAWING TOOLS
+// ==================================================
 
 function startSpatialSelection() {
 
@@ -675,8 +1074,11 @@ function startSpatialSelection() {
         window.gvkLayerControl &&
         window.gvkDrawnItems
     ) {
+
         initialiseSpatialSelection();
+
     } else {
+
         window.addEventListener(
             "gvk-map-ready",
             initialiseSpatialSelection,
